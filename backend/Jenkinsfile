@@ -1,29 +1,31 @@
 pipeline {
-    agent none
+    agent none  
 
     environment {
-        REPO_URL    = 'https://github.com/Fredericsonn/ecotracer.git'
-        REMOTE_USER = 'eco'
+        REPO_URL    = "https://github.com/Fredericsonn/ecotracer.git"
+        REMOTE_USER = "eco"
     }
 
     stages {
 
         stage('Load Secrets from Vault') {
-            agent any
             steps {
                 script {
                     withVault([
                         vaultSecrets: [[
-                            path: "jenkins/frontend/${ENV}",
+                            path: "jenkins/backend/${ENV}",
                             secretValues: [
-                                [envVar: 'REMOTE_HOST',  vaultKey: 'REMOTE_HOST'],
-                                [envVar: 'REGISTRY_URL', vaultKey: 'REGISTRY_URL'],
-                                [envVar: 'IMAGE_NAME',   vaultKey: 'IMAGE_NAME'],
-                                [envVar: 'BRANCH',       vaultKey: 'BRANCH'],
-                                [envVar: 'API',          vaultKey: 'API']
+                                [envVar: 'REMOTE_HOST',       vaultKey: 'REMOTE_HOST'],
+                                [envVar: 'REGISTRY_URL',      vaultKey: 'REGISTRY_URL'],
+                                [envVar: 'IMAGE_NAME',        vaultKey: 'IMAGE_NAME'],
+                                [envVar: 'BRANCH',            vaultKey: 'BRANCH'],
+                                [envVar: 'DATABASE_URL',      vaultKey: 'DATABASE_URL'],
+                                [envVar: 'DATABASE_USER',     vaultKey: 'DATABASE_USER'],
+                                [envVar: 'DATABASE_PASSWORD', vaultKey: 'DATABASE_PASSWORD']
                             ]
                         ]]
                     ]) {
+                        // ONLY non-sensitive value persisted
                         env.BRANCH = BRANCH
                     }
                 }
@@ -31,69 +33,57 @@ pipeline {
         }
 
         stage('Cloning the repository') {
-            agent {
-                docker {
-                    image 'ecotracer/front-agent'
-                    args '--user root'
-                }
-            }
+            agent { docker { image 'ecotracer/back-agent' } }
             steps {
                 git branch: "${env.BRANCH}", url: "${env.REPO_URL}"
             }
         }
 
-        stage('Build') {
-            agent {
-                docker {
-                    image 'ecotracer/front-agent'
-                    args '--user root'
-                }
-            }
+        stage("Build") {
+            agent { docker { image 'ecotracer/back-agent' } }
             steps {
                 withVault([
                     vaultSecrets: [[
-                        path: "jenkins/frontend/${ENV}",
+                        path: "jenkins/backend/${ENV}",
                         secretValues: [
-                            [envVar: 'API', vaultKey: 'API']
+                            [envVar: 'DATABASE_URL',      vaultKey: 'DATABASE_URL'],
+                            [envVar: 'DATABASE_USER',     vaultKey: 'DATABASE_USER'],
+                            [envVar: 'DATABASE_PASSWORD', vaultKey: 'DATABASE_PASSWORD']
                         ]
                     ]]
                 ]) {
-                    sh '''
-                        cd frontend
-                        echo "VITE_API=$API" > .env
-                        rm -rf node_modules package-lock.json
-                        npm cache clean --force
-                        npm install --no-optional
-                        npm install rollup --save-dev
-                        npm run build
-                    '''
+                    withEnv([
+                        "DATABASE_URL=${DATABASE_URL}",
+                        "DATABASE_USER=${DATABASE_USER}",
+                        "DATABASE_PASSWORD=${DATABASE_PASSWORD}"
+                    ]) {
+                        sh '''
+                            cd backend
+                            mvn clean package
+                        '''
+                    }
                 }
             }
         }
 
-        stage('Archive artifact') {
-            agent {
-                docker {
-                    image 'ecotracer/front-agent'
-                    args '--user root'
-                }
-            }
+        stage("Archive artifact") {
+            agent { docker { image 'ecotracer/back-agent' } }
             steps {
-                archiveArtifacts artifacts: 'frontend/dist,frontend/Dockerfile', allowEmptyArchive: false
+                archiveArtifacts artifacts: "backend/target/*.jar,backend/Dockerfile", allowEmptyArchive: false
             }
         }
 
-        stage('Building Docker Image') {
-            agent {
-                docker {
+        stage("Building Docker Image") {
+            agent { 
+                docker { 
                     image 'ecotracer/dind'
                     args '--user root --restart always -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
-                }
+                } 
             }
             steps {
                 withVault([
                     vaultSecrets: [[
-                        path: "jenkins/frontend/${ENV}",
+                        path: "jenkins/backend/${ENV}",
                         secretValues: [
                             [envVar: 'REGISTRY_URL', vaultKey: 'REGISTRY_URL'],
                             [envVar: 'IMAGE_NAME',   vaultKey: 'IMAGE_NAME']
@@ -101,23 +91,24 @@ pipeline {
                     ]]
                 ]) {
                     sh '''
-                        docker build -t $REGISTRY_URL/$IMAGE_NAME frontend/
+                        cd backend
+                        docker build -t $REGISTRY_URL/$IMAGE_NAME .
                     '''
                 }
             }
         }
 
-        stage('Pushing Image to the registry') {
-            agent {
-                docker {
+        stage("Pushing Image to the registry") {
+            agent { 
+                docker { 
                     image 'ecotracer/dind'
                     args '--user root --restart always -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
-                }
+                } 
             }
             steps {
                 withVault([
                     vaultSecrets: [[
-                        path: "jenkins/frontend/${ENV}",
+                        path: "jenkins/backend/${ENV}",
                         secretValues: [
                             [envVar: 'REGISTRY_URL', vaultKey: 'REGISTRY_URL'],
                             [envVar: 'IMAGE_NAME',   vaultKey: 'IMAGE_NAME']
@@ -140,36 +131,41 @@ pipeline {
             }
         }
 
-        stage('Deploy to the front server') {
-            agent {
-                docker {
+        stage("Deploy to the back server") {
+            agent { 
+                docker { 
                     image 'ecotracer/dind'
                     args '--user root --restart always -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
-                }
+                } 
             }
             steps {
                 withVault([
                     vaultSecrets: [[
-                        path: "jenkins/frontend/${ENV}",
+                        path: "jenkins/backend/${ENV}",
                         secretValues: [
-                            [envVar: 'REMOTE_HOST',  vaultKey: 'REMOTE_HOST'],
-                            [envVar: 'REGISTRY_URL', vaultKey: 'REGISTRY_URL'],
-                            [envVar: 'IMAGE_NAME',   vaultKey: 'IMAGE_NAME'],
-                            [envVar: 'API',          vaultKey: 'API']
+                            [envVar: 'REMOTE_HOST',       vaultKey: 'REMOTE_HOST'],
+                            [envVar: 'REGISTRY_URL',      vaultKey: 'REGISTRY_URL'],
+                            [envVar: 'IMAGE_NAME',        vaultKey: 'IMAGE_NAME'],
+                            [envVar: 'DATABASE_URL',      vaultKey: 'DATABASE_URL'],
+                            [envVar: 'DATABASE_USER',     vaultKey: 'DATABASE_USER'],
+                            [envVar: 'DATABASE_PASSWORD', vaultKey: 'DATABASE_PASSWORD']
                         ]
                     ]]
                 ]) {
                     sshagent(['creds']) {
                         sh '''
                             ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" \
-                            "docker stop frontend || true && docker rm frontend || true"
+                            "docker stop backend || true && docker rm backend || true"
 
                             ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" \
                             "docker rmi -f $REGISTRY_URL/$IMAGE_NAME || true"
 
                             ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" \
-                            "docker run -d --name frontend --network host \
-                             -e API=$API \
+                            "docker run -d --name backend \
+                             -p 8080:8080 \
+                             -e DATABASE_URL=$DATABASE_URL \
+                             -e DATABASE_USER=$DATABASE_USER \
+                             -e DATABASE_PASSWORD=$DATABASE_PASSWORD \
                              $REGISTRY_URL/$IMAGE_NAME"
                         '''
                     }
