@@ -68,7 +68,7 @@ pipeline {
 
                         # Build eco-auth
                         docker build \
-                          -f eco-Dockerfile \
+                          -f eco-auth/Dockerfile \
                           -t $REGISTRY_URL/$AUTH_IMAGE_NAME:$BUILD_NUMBER \
                           -t $REGISTRY_URL/$AUTH_IMAGE_NAME:latest \
                           .
