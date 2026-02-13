@@ -137,6 +137,8 @@ stage('Deploy (docker compose on remote)') {
 
                     [envVar: 'VAULT_URI',         vaultKey: 'VAULT_URI'],
                     [envVar: 'VAULT_TOKEN',       vaultKey: 'VAULT_TOKEN'],
+                    [envVar: 'VAULT_MOUNT',         vaultKey: 'VAULT_MOUNT'],
+                    [envVar: 'VAULT_APP',       vaultKey: 'VAULT_APP'],
                 ]
             ]]
         ]) {
