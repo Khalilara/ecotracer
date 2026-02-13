@@ -1,26 +1,26 @@
 package upec.episen.config;
 
-import java.util.Map;
-
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+
+import java.util.Map;
 
 @Component
 @ConfigurationProperties(prefix = "services")
 public class PropertiesService {
 
-    private static Map<String, Map<String, String>> env;
+    public Map<String, String> dev;
+    public Map<String, String> prod;
 
-    public Map<String, Map<String, String>> getEnv() {
-        return env;
-    }
+    public Map<String, String> getDev() { return dev; }
+    public void setDev(Map<String, String> dev) { this.dev = dev; }
 
-    public void setEnv(Map<String, Map<String, String>> env) {
-        this.env = env;
-    }
+    public Map<String, String> getProd() { return prod; }
+    public void setProd(Map<String, String> prod) { this.prod = prod; }
 
-    public static String getIp(String environment, String serviceName) {
-        Map<String, String> services = env.get(environment);
+    public String getIp(String environment, String serviceName) {
+        Map<String, String> services =
+                "prod".equalsIgnoreCase(environment) ? prod : dev;
         return services == null ? null : services.get(serviceName);
     }
 }

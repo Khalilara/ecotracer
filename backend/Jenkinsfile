@@ -11,17 +11,8 @@ pipeline {
         stage('Cloning the repository') {
             agent { docker { image 'ecotracer/back-agent' } }
             steps {
-                withVault([
-                    vaultSecrets: [[
-                        path: "jenkins/backend/${ENV}",
-                        secretValues: [
-                            [envVar: 'ENV', vaultKey: 'ENV']
-                        ]
-                    ]]
-                ]) {
-                    git branch: "${env.ENV}", url: "${env.REPO_URL}"
+                    git branch: "${ENV}", url: "${env.REPO_URL}"
                 }
-            }
         }
 
         stage('Build (multi-module)') {
