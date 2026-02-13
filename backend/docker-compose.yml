@@ -8,7 +8,7 @@ services:
     environment:
       - VAULT_URI=${VAULT_URI}
       - VAULT_TOKEN=${VAULT_TOKEN}
-      - SECRETS_PATH=${AUTH_SECRETS_PATH}
+      - SECRETS_PATH=${SECRETS_PATH}
 
   eco-core:
     image: ${REGISTRY_URL}/${CORE_IMAGE_NAME}:latest
@@ -19,4 +19,4 @@ services:
     environment:
       - VAULT_URI=${VAULT_URI}
       - VAULT_TOKEN=${VAULT_TOKEN}
-      - SECRETS_PATH=${CORE_SECRETS_PATH}
+      - SECRETS_PATH=${SECRETS_PATH}
