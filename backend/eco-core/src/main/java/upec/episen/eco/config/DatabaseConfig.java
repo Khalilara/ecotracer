@@ -3,6 +3,9 @@ package upec.episen.eco.config;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import jakarta.persistence.EntityManagerFactory;
+import java.util.HashMap;
+import java.util.Map;
+import javax.sql.DataSource;
 import org.hibernate.cfg.AvailableSettings;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -12,17 +15,13 @@ import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import javax.sql.DataSource;
-import java.util.HashMap;
-import java.util.Map;
-
 @Configuration
 public class DatabaseConfig {
 
-    @Value("${DATABASE_URL:localhost}")
+    @Value("${DATABASE_URL}")
     private String dbHost;
 
-    @Value("${DATABASE_NAME:eco}")
+    @Value("${DATABASE_NAME}")
     private String dbName;
 
     @Value("${DATABASE_USERNAME}")
@@ -53,7 +52,8 @@ public class DatabaseConfig {
         LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
         factory.setDataSource(dataSource);
         factory.setJpaVendorAdapter(vendorAdapter);
-        factory.setPackagesToScan("main.java.upec.episen.eco");
+
+        factory.setPackagesToScan("upec.episen.eco");
 
         Map<String, Object> jpaProps = new HashMap<>();
         jpaProps.put(AvailableSettings.HBM2DDL_AUTO, "update");
@@ -62,6 +62,7 @@ public class DatabaseConfig {
         factory.setJpaPropertyMap(jpaProps);
         return factory;
     }
+
 
     @Bean
     public PlatformTransactionManager transactionManager(EntityManagerFactory emf) {
