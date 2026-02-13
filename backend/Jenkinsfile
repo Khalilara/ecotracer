@@ -137,8 +137,6 @@ stage('Deploy (docker compose on remote)') {
 
                     [envVar: 'VAULT_URI',         vaultKey: 'VAULT_URI'],
                     [envVar: 'VAULT_TOKEN',       vaultKey: 'VAULT_TOKEN'],
-
-                    [envVar: 'SECRETS_PATH', vaultKey: 'SECRETS_PATH'],
                 ]
             ]]
         ]) {
@@ -158,8 +156,6 @@ stage('Deploy (docker compose on remote)') {
                        AUTH_IMAGE_NAME='${AUTH_IMAGE_NAME}' \
                        VAULT_URI='${VAULT_URI}' \
                        VAULT_TOKEN='${VAULT_TOKEN}' \
-                       SECRETS_PATH='${SECRETS_PATH}' \
-                       SECRETS_PATH='${SECRETS_PATH}' \
                        docker compose pull && \
                        REGISTRY_URL='${REGISTRY_URL}' \
                        CORE_IMAGE_NAME='${CORE_IMAGE_NAME}' \
