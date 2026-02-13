@@ -15,11 +15,11 @@ pipeline {
                     vaultSecrets: [[
                         path: "jenkins/backend/${ENV}",
                         secretValues: [
-                            [envVar: 'BRANCH', vaultKey: 'BRANCH']
+                            [envVar: 'ENV', vaultKey: 'ENV']
                         ]
                     ]]
                 ]) {
-                    git branch: "${env.BRANCH}", url: "${env.REPO_URL}"
+                    git branch: "${env.ENV}", url: "${env.REPO_URL}"
                 }
             }
         }
@@ -147,8 +147,7 @@ stage('Deploy (docker compose on remote)') {
                     [envVar: 'VAULT_URI',         vaultKey: 'VAULT_URI'],
                     [envVar: 'VAULT_TOKEN',       vaultKey: 'VAULT_TOKEN'],
 
-                    [envVar: 'CORE_SECRETS_PATH', vaultKey: 'CORE_SECRETS_PATH'],
-                    [envVar: 'AUTH_SECRETS_PATH', vaultKey: 'AUTH_SECRETS_PATH']
+                    [envVar: 'SECRETS_PATH', vaultKey: 'SECRETS_PATH'],
                 ]
             ]]
         ]) {
@@ -168,16 +167,15 @@ stage('Deploy (docker compose on remote)') {
                        AUTH_IMAGE_NAME='${AUTH_IMAGE_NAME}' \
                        VAULT_URI='${VAULT_URI}' \
                        VAULT_TOKEN='${VAULT_TOKEN}' \
-                       CORE_SECRETS_PATH='${CORE_SECRETS_PATH}' \
-                       AUTH_SECRETS_PATH='${AUTH_SECRETS_PATH}' \
+                       SECRETS_PATH='${SECRETS_PATH}' \
+                       SECRETS_PATH='${SECRETS_PATH}' \
                        docker compose pull && \
                        REGISTRY_URL='${REGISTRY_URL}' \
                        CORE_IMAGE_NAME='${CORE_IMAGE_NAME}' \
                        AUTH_IMAGE_NAME='${AUTH_IMAGE_NAME}' \
                        VAULT_URI='${VAULT_URI}' \
                        VAULT_TOKEN='${VAULT_TOKEN}' \
-                       CORE_SECRETS_PATH='${CORE_SECRETS_PATH}' \
-                       AUTH_SECRETS_PATH='${AUTH_SECRETS_PATH}' \
+                       SECRETS_PATH='${SECRETS_PATH}' \
                        docker compose up -d --remove-orphans && \
                        docker image prune -f"
                 '''

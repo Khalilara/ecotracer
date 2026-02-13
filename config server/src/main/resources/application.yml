@@ -1,0 +1,15 @@
+services:
+  dev:
+    backend: 172.31.250.10
+    kafka: 172.31.250.70
+    mqtt: 172.31.250.80
+    spark: 172.31.250.90
+    hadoop: 172.31.250.100
+    reverseProxy: 172.31.250.110
+  prod:
+    backend: 172.31.251.10
+    kafka: 172.31.251.70
+    mqtt: 172.31.251.80
+    spark: 172.31.251.90
+    hadoop: 172.31.251.100
+    reverseProxy: 172.31.251.110
