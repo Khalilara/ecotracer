@@ -166,7 +166,9 @@ stage('Deploy (docker compose on remote)') {
                        AUTH_IMAGE_NAME='${AUTH_IMAGE_NAME}' \
                        VAULT_URI='${VAULT_URI}' \
                        VAULT_TOKEN='${VAULT_TOKEN}' \
-                       SECRETS_PATH='${SECRETS_PATH}' \
+                       VAULT_MOUNT='${VAULT_MOUNT}' \
+                       VAULT_APP='${VAULT_APP}' \
+                       ENV='${ENV}' \
                        docker compose up -d --remove-orphans && \
                        docker image prune -f"
                 '''
