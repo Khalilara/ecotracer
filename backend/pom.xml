@@ -13,7 +13,6 @@
     <module>eco-common</module>
     <module>eco-auth</module>
     <module>eco-core</module>
-    <module>eco-optimization</module>
   </modules>
 
   <properties>
@@ -24,7 +23,6 @@
 
   <dependencyManagement>
     <dependencies>
-      <!-- Spring BOMs -->
       <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
@@ -41,7 +39,6 @@
         <scope>import</scope>
       </dependency>
 
-      <!-- ✅ your internal module -->
       <dependency>
         <groupId>upec.episen.eco</groupId>
         <artifactId>eco-common</artifactId>

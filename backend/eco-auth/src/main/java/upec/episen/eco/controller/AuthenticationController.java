@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import upec.episen.eco.model.AuthenticationRequest;
 import upec.episen.eco.model.AuthenticationResponse;
 import upec.episen.eco.models.User.User;
-import upec.episen.eco.security.JwtUtil;
+import upec.episen.eco.util.JwtUtil;
 import upec.episen.eco.service.UserService;
 
 

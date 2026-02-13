@@ -1,4 +1,4 @@
-package upec.episen.eco.security;
+package upec.episen.eco.util;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;

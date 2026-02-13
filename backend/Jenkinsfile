@@ -1,117 +1,106 @@
 pipeline {
-    agent none  
+    agent none
 
     environment {
-        REPO_URL    = "https://github.com/Fredericsonn/ecotracer.git"
-        REMOTE_USER = "eco"
+        REPO_URL    = 'https://github.com/Fredericsonn/ecotracer.git'
+        REMOTE_USER = 'eco'
     }
 
     stages {
 
-        stage('Load Secrets from Vault') {
-            steps {
-                script {
-                    withVault([
-                        vaultSecrets: [[
-                            path: "jenkins/backend/${ENV}",
-                            secretValues: [
-                                [envVar: 'REMOTE_HOST',       vaultKey: 'REMOTE_HOST'],
-                                [envVar: 'REGISTRY_URL',      vaultKey: 'REGISTRY_URL'],
-                                [envVar: 'IMAGE_NAME',        vaultKey: 'IMAGE_NAME'],
-                                [envVar: 'BRANCH',            vaultKey: 'BRANCH'],
-                                [envVar: 'DATABASE_URL',      vaultKey: 'DATABASE_URL'],
-                                [envVar: 'DATABASE_USER',     vaultKey: 'DATABASE_USER'],
-                                [envVar: 'DATABASE_PASSWORD', vaultKey: 'DATABASE_PASSWORD']
-                            ]
-                        ]]
-                    ]) {
-                        // ONLY non-sensitive value persisted
-                        env.BRANCH = BRANCH
-                    }
-                }
-            }
-        }
-
         stage('Cloning the repository') {
             agent { docker { image 'ecotracer/back-agent' } }
             steps {
-                git branch: "${env.BRANCH}", url: "${env.REPO_URL}"
-            }
-        }
-
-        stage("Build") {
-            agent { docker { image 'ecotracer/back-agent' } }
-            steps {
                 withVault([
                     vaultSecrets: [[
                         path: "jenkins/backend/${ENV}",
                         secretValues: [
-                            [envVar: 'DATABASE_URL',      vaultKey: 'DATABASE_URL'],
-                            [envVar: 'DATABASE_USER',     vaultKey: 'DATABASE_USER'],
-                            [envVar: 'DATABASE_PASSWORD', vaultKey: 'DATABASE_PASSWORD']
+                            [envVar: 'BRANCH', vaultKey: 'BRANCH']
                         ]
                     ]]
                 ]) {
-                    withEnv([
-                        "DATABASE_URL=${DATABASE_URL}",
-                        "DATABASE_USER=${DATABASE_USER}",
-                        "DATABASE_PASSWORD=${DATABASE_PASSWORD}"
-                    ]) {
-                        sh '''
-                            cd backend
-                            mvn clean package
-                        '''
-                    }
+                    git branch: "${env.BRANCH}", url: "${env.REPO_URL}"
                 }
             }
         }
 
-        stage("Archive artifact") {
+        stage('Build (multi-module)') {
             agent { docker { image 'ecotracer/back-agent' } }
             steps {
-                archiveArtifacts artifacts: "backend/target/*.jar,backend/Dockerfile", allowEmptyArchive: false
+                sh '''
+                    cd backend
+                    mvn -U -DskipTests clean package
+                '''
             }
         }
 
-        stage("Building Docker Image") {
-            agent { 
-                docker { 
+        stage('Archive artifacts') {
+            agent { docker { image 'ecotracer/back-agent' } }
+            steps {
+                archiveArtifacts artifacts: '''
+                    backend/eco-core/target/*.jar,
+                    backend/eco-auth/target/*.jar,
+                    backend/docker/eco-core.Dockerfile,
+                    backend/docker/eco-auth.Dockerfile,
+                    backend/docker-compose.yml
+                ''', allowEmptyArchive: false
+            }
+        }
+
+        stage('Build Docker images') {
+            agent {
+                docker {
                     image 'ecotracer/dind'
                     args '--user root --restart always -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
-                } 
+                }
             }
             steps {
                 withVault([
                     vaultSecrets: [[
                         path: "jenkins/backend/${ENV}",
                         secretValues: [
-                            [envVar: 'REGISTRY_URL', vaultKey: 'REGISTRY_URL'],
-                            [envVar: 'IMAGE_NAME',   vaultKey: 'IMAGE_NAME']
+                            [envVar: 'REGISTRY_URL',    vaultKey: 'REGISTRY_URL'],
+                            [envVar: 'CORE_IMAGE_NAME', vaultKey: 'CORE_IMAGE_NAME'],
+                            [envVar: 'AUTH_IMAGE_NAME', vaultKey: 'AUTH_IMAGE_NAME']
                         ]
                     ]]
                 ]) {
                     sh '''
                         cd backend
-                        docker build -t $REGISTRY_URL/$IMAGE_NAME .
+
+                        # Build eco-core
+                        docker build \
+                          -f docker/eco-core.Dockerfile \
+                          -t $REGISTRY_URL/$CORE_IMAGE_NAME:$BUILD_NUMBER \
+                          -t $REGISTRY_URL/$CORE_IMAGE_NAME:latest \
+                          .
+
+                        # Build eco-auth
+                        docker build \
+                          -f docker/eco-auth.Dockerfile \
+                          -t $REGISTRY_URL/$AUTH_IMAGE_NAME:$BUILD_NUMBER \
+                          -t $REGISTRY_URL/$AUTH_IMAGE_NAME:latest \
+                          .
                     '''
                 }
             }
         }
 
-        stage("Pushing Image to the registry") {
-            agent { 
-                docker { 
+        stage('Push Docker images') {
+            agent {
+                docker {
                     image 'ecotracer/dind'
                     args '--user root --restart always -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
-                } 
+                }
             }
             steps {
                 withVault([
                     vaultSecrets: [[
                         path: "jenkins/backend/${ENV}",
                         secretValues: [
-                            [envVar: 'REGISTRY_URL', vaultKey: 'REGISTRY_URL'],
-                            [envVar: 'IMAGE_NAME',   vaultKey: 'IMAGE_NAME']
+                            [envVar: 'REGISTRY_URL',    vaultKey: 'REGISTRY_URL'],
+                            [envVar: 'CORE_IMAGE_NAME', vaultKey: 'CORE_IMAGE_NAME'],
+                            [envVar: 'AUTH_IMAGE_NAME', vaultKey: 'AUTH_IMAGE_NAME']
                         ]
                     ]]
                 ]) {
@@ -123,63 +112,84 @@ pipeline {
                         )
                     ]) {
                         sh '''
-                            docker login $REGISTRY_URL -u $USERNAME -p $PASSWORD
-                            docker push $REGISTRY_URL/$IMAGE_NAME
+                            docker login $REGISTRY_URL -u "$USERNAME" -p "$PASSWORD"
+
+                            docker push $REGISTRY_URL/$CORE_IMAGE_NAME:$BUILD_NUMBER
+                            docker push $REGISTRY_URL/$CORE_IMAGE_NAME:latest
+
+                            docker push $REGISTRY_URL/$AUTH_IMAGE_NAME:$BUILD_NUMBER
+                            docker push $REGISTRY_URL/$AUTH_IMAGE_NAME:latest
                         '''
                     }
                 }
             }
         }
 
-        stage("Deploy to the back server") {
-            agent { 
-                docker { 
-                    image 'ecotracer/dind'
-                    args '--user root --restart always -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
-                } 
-            }
-            steps {
-                withVault([
-                    vaultSecrets: [[
-                        path: "jenkins/backend/${ENV}",
-                        secretValues: [
-                            [envVar: 'REMOTE_HOST',       vaultKey: 'REMOTE_HOST'],
-                            [envVar: 'REGISTRY_URL',      vaultKey: 'REGISTRY_URL'],
-                            [envVar: 'IMAGE_NAME',        vaultKey: 'IMAGE_NAME'],
-                            [envVar: 'DATABASE_URL',      vaultKey: 'DATABASE_URL'],
-                            [envVar: 'DATABASE_USER',     vaultKey: 'DATABASE_USER'],
-                            [envVar: 'DATABASE_PASSWORD', vaultKey: 'DATABASE_PASSWORD']
-                        ]
-                    ]]
-                ]) {
-                    sshagent(['creds']) {
-                        sh '''
-                            ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" \
-                            "docker stop backend || true && docker rm backend || true"
-
-                            ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" \
-                            "docker rmi -f $REGISTRY_URL/$IMAGE_NAME || true"
-
-                            ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" \
-                            "docker run -d --name backend \
-                             -p 8080:8080 \
-                             -e DATABASE_URL=$DATABASE_URL \
-                             -e DATABASE_USER=$DATABASE_USER \
-                             -e DATABASE_PASSWORD=$DATABASE_PASSWORD \
-                             $REGISTRY_URL/$IMAGE_NAME"
-                        '''
-                    }
-                }
-            }
+stage('Deploy (docker compose on remote)') {
+    agent {
+        docker {
+            image 'ecotracer/dind'
+            args '--user root --restart always -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
         }
     }
 
+    steps {
+        withVault([
+            vaultSecrets: [[
+                path: "jenkins/backend/${ENV}",
+                secretValues: [
+                    [envVar: 'REMOTE_HOST',       vaultKey: 'REMOTE_HOST'],
+                    [envVar: 'REGISTRY_URL',      vaultKey: 'REGISTRY_URL'],
+
+                    [envVar: 'CORE_IMAGE_NAME',   vaultKey: 'CORE_IMAGE_NAME'],
+                    [envVar: 'AUTH_IMAGE_NAME',   vaultKey: 'AUTH_IMAGE_NAME'],
+
+                    [envVar: 'VAULT_URI',         vaultKey: 'VAULT_URI'],
+                    [envVar: 'VAULT_TOKEN',       vaultKey: 'VAULT_TOKEN'],
+
+                    [envVar: 'CORE_SECRETS_PATH', vaultKey: 'CORE_SECRETS_PATH'],
+                    [envVar: 'AUTH_SECRETS_PATH', vaultKey: 'AUTH_SECRETS_PATH']
+                ]
+            ]]
+        ]) {
+            sshagent(['creds']) {
+                sh '''
+                    set -e
+
+                    # Make sure remote directory exists and copy only compose (no .env / no secrets file)
+                    ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" "mkdir -p ~/eco-backend"
+                    scp -o StrictHostKeyChecking=no backend/docker-compose.yml "$REMOTE_USER@$REMOTE_HOST:~/eco-backend/docker-compose.yml"
+
+                    # Run compose with env vars injected only for this SSH command (nothing written on remote disk)
+                    ssh -o StrictHostKeyChecking=no "$REMOTE_USER@$REMOTE_HOST" \
+                      "cd ~/eco-backend && \
+                       REGISTRY_URL='${REGISTRY_URL}' \
+                       CORE_IMAGE_NAME='${CORE_IMAGE_NAME}' \
+                       AUTH_IMAGE_NAME='${AUTH_IMAGE_NAME}' \
+                       VAULT_URI='${VAULT_URI}' \
+                       VAULT_TOKEN='${VAULT_TOKEN}' \
+                       CORE_SECRETS_PATH='${CORE_SECRETS_PATH}' \
+                       AUTH_SECRETS_PATH='${AUTH_SECRETS_PATH}' \
+                       docker compose pull && \
+                       REGISTRY_URL='${REGISTRY_URL}' \
+                       CORE_IMAGE_NAME='${CORE_IMAGE_NAME}' \
+                       AUTH_IMAGE_NAME='${AUTH_IMAGE_NAME}' \
+                       VAULT_URI='${VAULT_URI}' \
+                       VAULT_TOKEN='${VAULT_TOKEN}' \
+                       CORE_SECRETS_PATH='${CORE_SECRETS_PATH}' \
+                       AUTH_SECRETS_PATH='${AUTH_SECRETS_PATH}' \
+                       docker compose up -d --remove-orphans && \
+                       docker image prune -f"
+                '''
+            }
+        }
+    }
+}
+
+    }
+
     post {
-        success {
-            echo 'Deployment completed successfully!'
-        }
-        failure {
-            echo 'Deployment failed. Please check the logs.'
-        }
+        success { echo 'Deployment completed successfully!' }
+        failure { echo 'Deployment failed. Please check the logs.' }
     }
 }

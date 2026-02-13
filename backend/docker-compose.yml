@@ -1,0 +1,22 @@
+services:
+  eco-auth:
+    image: ${REGISTRY_URL}/${AUTH_IMAGE_NAME}:latest
+    container_name: eco-auth
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - VAULT_URI=${VAULT_URI}
+      - VAULT_TOKEN=${VAULT_TOKEN}
+      - SECRETS_PATH=${AUTH_SECRETS_PATH}
+
+  eco-core:
+    image: ${REGISTRY_URL}/${CORE_IMAGE_NAME}:latest
+    container_name: eco-core
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - VAULT_URI=${VAULT_URI}
+      - VAULT_TOKEN=${VAULT_TOKEN}
+      - SECRETS_PATH=${CORE_SECRETS_PATH}
