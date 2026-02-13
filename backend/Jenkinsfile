@@ -31,8 +31,8 @@ pipeline {
                 archiveArtifacts artifacts: '''
                     backend/eco-core/target/*.jar,
                     backend/eco-auth/target/*.jar,
-                    backend/eco-core/Dockerfile,
-                    backend/eco-auth/Dockerfile,
+                    backend/eco-core/core.Dockerfile,
+                    backend/eco-auth/auth.Dockerfile,
                     backend/docker-compose.yml
                 ''', allowEmptyArchive: false
             }
@@ -61,14 +61,14 @@ pipeline {
 
                         # Build eco-core
                         docker build \
-                          -f docker/eco-core.Dockerfile \
+                          -f core.Dockerfile \
                           -t $REGISTRY_URL/$CORE_IMAGE_NAME:$BUILD_NUMBER \
                           -t $REGISTRY_URL/$CORE_IMAGE_NAME:latest \
                           .
 
                         # Build eco-auth
                         docker build \
-                          -f docker/eco-auth.Dockerfile \
+                          -f auth.Dockerfile \
                           -t $REGISTRY_URL/$AUTH_IMAGE_NAME:$BUILD_NUMBER \
                           -t $REGISTRY_URL/$AUTH_IMAGE_NAME:latest \
                           .
