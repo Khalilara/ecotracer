@@ -1,0 +1,208 @@
+{{ config(materialized='table') }}
+
+SELECT
+    g.date                                              AS date_id,
+    g.house_id,
+    a.appliance_id,
+    g.daily_kwh,
+    g.daily_co2_kg,
+    g.hours_active,
+    ROUND((g.daily_kwh * 0.38)::numeric, 4)             AS daily_cost_eur,
+    CASE
+        WHEN g.hours_active > 20
+        THEN ROUND((g.daily_kwh - (a.expected_cost_eur / 365))::numeric, 4)
+        ELSE 0
+    END                                                 AS excess_kwh
+FROM {{ source('public', 'energy_gold') }} g
+LEFT JOIN {{ ref('dim_appliance') }} a
+    ON g.machine_name = a.machine_name
+    AND g.house_id = a.house_id
+
+{{ config(materialized='table') }}
+
+WITH unique_appliances AS (
+    SELECT DISTINCT
+        machine_name,
+        house_id,
+        CASE
+            WHEN machine_name ILIKE '%refrigerator%' THEN 'Refrigeration'
+            WHEN machine_name ILIKE '%freezer%'      THEN 'Refrigeration'
+            WHEN machine_name ILIKE '%washing%'      THEN 'Washing'
+            WHEN machine_name ILIKE '%dish%'         THEN 'Washing'
+            WHEN machine_name ILIKE '%dryer%'        THEN 'Washing'
+            WHEN machine_name ILIKE '%coffee%'       THEN 'Kitchen'
+            WHEN machine_name ILIKE '%heat%'         THEN 'Heating'
+            ELSE 'Other'
+        END AS category
+    FROM {{ source('public', 'energy_gold') }}
+)
+SELECT
+    ROW_NUMBER() OVER (ORDER BY house_id, machine_name) AS appliance_id,
+    machine_name,
+    house_id,
+    category,
+    CASE category
+        WHEN 'Refrigeration' THEN 'A+'
+        WHEN 'Washing'       THEN 'A'
+        WHEN 'Kitchen'       THEN 'B'
+        WHEN 'Heating'       THEN 'C'
+        ELSE 'D'
+    END                                                  AS energy_label,
+    CASE category
+        WHEN 'Refrigeration' THEN 8
+        WHEN 'Washing'       THEN 6
+        WHEN 'Kitchen'       THEN 4
+        WHEN 'Heating'       THEN 10
+        ELSE 5
+    END                                                  AS age_years,
+    CASE category
+        WHEN 'Refrigeration' THEN 150.00
+        WHEN 'Washing'       THEN 200.00
+        WHEN 'Kitchen'       THEN 80.00
+        WHEN 'Heating'       THEN 500.00
+        ELSE 100.00
+    END                                                  AS expected_cost_eur,
+    CASE category
+        WHEN 'Refrigeration' THEN 600.00
+        WHEN 'Washing'       THEN 800.00
+        WHEN 'Kitchen'       THEN 300.00
+        WHEN 'Heating'       THEN 2000.00
+        ELSE 400.00
+    END                                                  AS replace_cost_eur
+FROM unique_appliances
+
+{{ config(materialized='table') }}
+
+SELECT DISTINCT
+    date                                    AS date_id,
+    EXTRACT(year FROM date)::INT            AS year,
+    EXTRACT(month FROM date)::INT           AS month,
+    EXTRACT(week FROM date)::INT            AS week,
+    EXTRACT(dow FROM date)::INT             AS day_of_week,
+    CASE WHEN EXTRACT(dow FROM date) IN (0,6)
+         THEN true ELSE false END           AS is_weekend,
+    CASE EXTRACT(month FROM date)
+        WHEN 12 THEN 'winter' WHEN 1 THEN 'winter' WHEN 2 THEN 'winter'
+        WHEN 3 THEN 'spring' WHEN 4 THEN 'spring' WHEN 5 THEN 'spring'
+        WHEN 6 THEN 'summer' WHEN 7 THEN 'summer' WHEN 8 THEN 'summer'
+        ELSE 'autumn' END                   AS season
+FROM {{ source('public', 'energy_gold') }}
+
+
+{{ config(materialized='table') }}
+
+SELECT DISTINCT
+    house_id,
+    CASE house_id
+        WHEN 'house_01' THEN 2
+        WHEN 'house_02' THEN 3
+        WHEN 'house_03' THEN 4
+        WHEN 'house_04' THEN 2
+        WHEN 'house_05' THEN 3
+        WHEN 'house_06' THEN 2
+        WHEN 'house_07' THEN 4
+        WHEN 'house_08' THEN 2
+        WHEN 'house_09' THEN 3
+        WHEN 'house_10' THEN 2
+        WHEN 'house_11' THEN 1
+        WHEN 'house_14' THEN 3
+    END                         AS nb_persons,
+    CASE house_id
+        WHEN 'house_01' THEN 'apartment'
+        WHEN 'house_02' THEN 'house'
+        WHEN 'house_03' THEN 'house'
+        WHEN 'house_04' THEN 'apartment'
+        WHEN 'house_05' THEN 'house'
+        WHEN 'house_06' THEN 'apartment'
+        WHEN 'house_07' THEN 'house'
+        WHEN 'house_08' THEN 'apartment'
+        WHEN 'house_09' THEN 'house'
+        WHEN 'house_10' THEN 'apartment'
+        WHEN 'house_11' THEN 'apartment'
+        WHEN 'house_14' THEN 'house'
+    END                         AS home_type,
+    CASE house_id
+        WHEN 'house_01' THEN 65
+        WHEN 'house_02' THEN 120
+        WHEN 'house_03' THEN 150
+        WHEN 'house_04' THEN 75
+        WHEN 'house_05' THEN 130
+        WHEN 'house_06' THEN 80
+        WHEN 'house_07' THEN 160
+        WHEN 'house_08' THEN 70
+        WHEN 'house_09' THEN 140
+        WHEN 'house_10' THEN 85
+        WHEN 'house_11' THEN 55
+        WHEN 'house_14' THEN 175
+    END                         AS surface_m2,
+    CASE house_id
+        WHEN 'house_02' THEN true
+        WHEN 'house_05' THEN true
+        WHEN 'house_07' THEN true
+        ELSE false
+    END                         AS has_solar,
+    CASE house_id
+        WHEN 'house_01' THEN 'economique'
+        WHEN 'house_02' THEN 'moyenne'
+        WHEN 'house_03' THEN 'forte_emettrice'
+        WHEN 'house_04' THEN 'economique'
+        WHEN 'house_05' THEN 'moyenne'
+        WHEN 'house_06' THEN 'economique'
+        WHEN 'house_07' THEN 'forte_emettrice'
+        WHEN 'house_08' THEN 'economique'
+        WHEN 'house_09' THEN 'moyenne'
+        WHEN 'house_10' THEN 'economique'
+        WHEN 'house_11' THEN 'economique'
+        WHEN 'house_14' THEN 'forte_emettrice'
+    END                         AS segment,
+    'Germany'                   AS country
+FROM {{ source('public', 'energy_gold') }}
+
+
+{{ config(materialized='table') }}
+
+WITH hours AS (
+    SELECT generate_series(0, 23) AS hour
+),
+dates AS (
+    SELECT DISTINCT date AS date_id
+    FROM {{ source('public', 'energy_gold') }}
+)
+SELECT
+    d.date_id,
+    h.hour,
+    CASE
+        WHEN h.hour >= 22 OR h.hour < 6 THEN 'HC'
+        ELSE 'HP'
+    END                                         AS tariff_type,
+    CASE
+        WHEN h.hour >= 22 OR h.hour < 6 THEN 0.22
+        ELSE 0.38
+    END                                         AS price_eur_kwh,
+    0.053                                       AS co2_factor_kg_kwh,
+    DATE_TRUNC('year', d.date_id)::date         AS valid_from,
+    (DATE_TRUNC('year', d.date_id)
+        + INTERVAL '1 year - 1 day')::date      AS valid_to
+FROM dates d
+CROSS JOIN hours h
+
+{{ config(materialized='table') }}
+
+WITH dates_houses AS (
+    SELECT DISTINCT
+        date    AS date_id,
+        house_id
+    FROM {{ source('public', 'energy_gold') }}
+)
+SELECT
+    d.date_id,
+    d.house_id,
+    ROUND((15 + 10 * SIN((EXTRACT(doy FROM d.date_id) - 80) * 2 * PI() / 365))::numeric, 1) AS temp_avg_celsius,
+    ROUND((10 + 10 * SIN((EXTRACT(doy FROM d.date_id) - 80) * 2 * PI() / 365))::numeric, 1) AS temp_min_celsius,
+    ROUND((20 + 10 * SIN((EXTRACT(doy FROM d.date_id) - 80) * 2 * PI() / 365))::numeric, 1) AS temp_max_celsius,
+    ROUND((ABS(SIN(EXTRACT(doy FROM d.date_id) * 7)) * 15)::numeric, 1)                     AS precipitation_mm,
+    CASE
+        WHEN EXTRACT(month FROM d.date_id) IN (11, 12, 1, 2, 3) THEN true
+        ELSE false
+    END                                                                                       AS isheating_season
+FROM dates_houses d
